@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>Local Translator</string>
+    <key>CFBundleExecutable</key>
+    <string>local-translator</string>
+    <key>CFBundleIdentifier</key>
+    <string>dev.local.LocalTranslator</string>
+    <key>CFBundleName</key>
+    <string>Local Translator</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Local Translator sends a copy shortcut to capture selected text.</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Local only.</string>
+</dict>
+</plist>
