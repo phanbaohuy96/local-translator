@@ -5,7 +5,7 @@ Native macOS menu-bar translator backed by local Ollama.
 ## Features
 
 - Persistent menu-bar icon with no Dock icon.
-- Global shortcut: `Option-Space`.
+- Global shortcuts: `Option-Space` translates, `Command-Option-R` rewrites.
 - Selected-text capture by temporary copy, with clipboard restoration.
 - Clipboard fallback when no selection is available or Accessibility permission is missing.
 - Floating translator popup with source preview, English notes, Vietnamese translation, and session history.
@@ -41,7 +41,7 @@ The app uses `http://localhost:11434/api/chat` and defaults to `qwen2.5:7b`.
 
 1. Launch the app.
 2. Grant Accessibility permission when prompted if selected-text capture is needed.
-3. Select text in another app and press `Option-Space`.
+3. Select text in another app and press `Option-Space` to translate or `Command-Option-R` to rewrite.
 4. If no selected text is captured, the app translates current clipboard text.
 5. Use the menu-bar icon for Open Translator, Clipboard History, Settings, Start at Login, and Quit.
 

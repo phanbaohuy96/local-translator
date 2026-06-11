@@ -2,7 +2,17 @@ import AppKit
 import ApplicationServices
 
 protocol SelectionCapturing {
-    func captureText() async -> String?
+    func captureText() async -> CapturedText?
+}
+
+struct CapturedText: Equatable {
+    let text: String
+    let source: CaptureSource
+}
+
+enum CaptureSource: Equatable {
+    case selection
+    case clipboard
 }
 
 struct PasteboardSnapshot {
@@ -16,7 +26,7 @@ final class SelectionCaptureService: SelectionCapturing {
         self.pasteboard = pasteboard
     }
 
-    func captureText() async -> String? {
+    func captureText() async -> CapturedText? {
         let snapshot = savePasteboard()
         let clipboardFallback = pasteboard.string(forType: .string)
 
@@ -31,12 +41,15 @@ final class SelectionCaptureService: SelectionCapturing {
             restorePasteboard(snapshot)
 
             if let selectedText, !selectedText.isEmpty {
-                return selectedText
+                return CapturedText(text: selectedText, source: .selection)
             }
         }
 
         restorePasteboard(snapshot)
-        return clipboardFallback?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        return clipboardFallback?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+            .map { CapturedText(text: $0, source: .clipboard) }
     }
 
     static var isAccessibilityTrusted: Bool {

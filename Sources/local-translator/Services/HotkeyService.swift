@@ -3,12 +3,13 @@ import Foundation
 
 @MainActor
 final class HotkeyService {
-    var onHotkey: (() -> Void)?
+    var onTranslateHotkey: (() -> Void)?
+    var onRewriteHotkey: (() -> Void)?
 
-    private var hotKeyRef: EventHotKeyRef?
+    private var hotKeyRefs: [EventHotKeyRef] = []
     private var eventHandlerRef: EventHandlerRef?
 
-    func registerOptionSpace() {
+    func registerHotkeys() {
         unregister()
 
         var eventType = EventTypeSpec(
@@ -35,13 +36,20 @@ final class HotkeyService {
                     &hotKeyID
                 )
 
-                guard status == noErr, hotKeyID.id == 1 else {
+                guard status == noErr else {
                     return noErr
                 }
 
                 let service = Unmanaged<HotkeyService>.fromOpaque(userData).takeUnretainedValue()
                 DispatchQueue.main.async {
-                    service.onHotkey?()
+                    switch Hotkey(rawValue: hotKeyID.id) {
+                    case .translate:
+                        service.onTranslateHotkey?()
+                    case .rewrite:
+                        service.onRewriteHotkey?()
+                    case .none:
+                        break
+                    }
                 }
                 return noErr
             },
@@ -51,22 +59,15 @@ final class HotkeyService {
             &eventHandlerRef
         )
 
-        let hotKeyID = EventHotKeyID(signature: Self.signature, id: 1)
-        RegisterEventHotKey(
-            UInt32(kVK_Space),
-            UInt32(optionKey),
-            hotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotKeyRef
-        )
+        register(.translate, keyCode: UInt32(kVK_Space), modifiers: UInt32(optionKey))
+        register(.rewrite, keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(optionKey | cmdKey))
     }
 
     func unregister() {
-        if let hotKeyRef {
+        for hotKeyRef in hotKeyRefs {
             UnregisterEventHotKey(hotKeyRef)
-            self.hotKeyRef = nil
         }
+        hotKeyRefs = []
 
         if let eventHandlerRef {
             RemoveEventHandler(eventHandlerRef)
@@ -74,5 +75,28 @@ final class HotkeyService {
         }
     }
 
+    private func register(_ hotkey: Hotkey, keyCode: UInt32, modifiers: UInt32) {
+        var hotKeyRef: EventHotKeyRef?
+        let hotKeyID = EventHotKeyID(signature: Self.signature, id: hotkey.rawValue)
+
+        RegisterEventHotKey(
+            keyCode,
+            modifiers,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &hotKeyRef
+        )
+
+        if let hotKeyRef {
+            hotKeyRefs.append(hotKeyRef)
+        }
+    }
+
     private static let signature: OSType = 0x4C545250
+
+    private enum Hotkey: UInt32 {
+        case translate = 1
+        case rewrite = 2
+    }
 }

@@ -44,6 +44,26 @@ struct TranslatorView: View {
             .help("Translate")
 
             Button {
+                Task {
+                    await viewModel.rewriteCurrentSource()
+                }
+            } label: {
+                Image(systemName: "wand.and.stars")
+            }
+            .help("Rewrite Source")
+            .disabled(viewModel.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            Button {
+                Task {
+                    await viewModel.replaceSelectionWithRewrite()
+                }
+            } label: {
+                Image(systemName: "text.insert")
+            }
+            .help("Replace Selection")
+            .disabled(!viewModel.canReplaceSelection)
+
+            Button {
                 viewModel.copyVietnameseToClipboard()
             } label: {
                 Image(systemName: "doc.on.doc")
@@ -96,8 +116,16 @@ struct TranslatorView: View {
                 }
 
                 section(title: "Source", text: viewModel.sourceText, empty: "Selection or clipboard text appears here")
-                section(title: "English", text: viewModel.englishText, empty: "Meaning and usage notes stream here")
-                section(title: "Vietnamese", text: viewModel.vietnameseText, empty: "Translation streams here")
+
+                switch viewModel.outputMode {
+                case .rewrite:
+                    section(title: "Rewritten", text: viewModel.rewriteText, empty: "Rewritten text streams here")
+                case .translation:
+                    section(title: "English", text: viewModel.englishText, empty: "Meaning and usage notes stream here")
+                    section(title: "Vietnamese", text: viewModel.vietnameseText, empty: "Translation streams here")
+                case .none:
+                    EmptyView()
+                }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)

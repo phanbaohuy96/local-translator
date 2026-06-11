@@ -6,9 +6,11 @@ final class TranslationViewModel: ObservableObject {
     @Published var sourceText = ""
     @Published var englishText = ""
     @Published var vietnameseText = ""
+    @Published var rewriteText = ""
     @Published var rawOutput = ""
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var outputMode: TranslationOutputMode = .none
     @Published var model: String {
         didSet {
             UserDefaults.standard.set(model, forKey: Self.modelDefaultsKey)
@@ -18,18 +20,30 @@ final class TranslationViewModel: ObservableObject {
     let historyService: ClipboardHistoryService
 
     private let selectionService: SelectionCapturing
+    private let replacementService: SelectionReplacing
     private let translator: OllamaTranslating
-    private var activeTranslationID: UUID?
-    private var translationTask: Task<Void, Never>?
+    private var activeOperationID: UUID?
+    private var generationTask: Task<Void, Never>?
+    private var rewriteSourceText = ""
+    private var currentSourceSupportsReplacement = false
     private static let modelDefaultsKey = "ollamaModel"
+
+    var canReplaceSelection: Bool {
+        !isLoading
+            && currentSourceSupportsReplacement
+            && !rewriteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && rewriteSourceText == sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     init(
         selectionService: SelectionCapturing,
         historyService: ClipboardHistoryService,
+        replacementService: SelectionReplacing,
         translator: OllamaTranslating
     ) {
         self.selectionService = selectionService
         self.historyService = historyService
+        self.replacementService = replacementService
         self.translator = translator
         self.model = UserDefaults.standard.string(forKey: Self.modelDefaultsKey) ?? "qwen2.5:7b"
     }
@@ -39,21 +53,29 @@ final class TranslationViewModel: ObservableObject {
             return
         }
 
-        await translate(captured)
+        await translate(captured, preserveReplacementEligibility: true)
     }
 
     func captureInput() async -> String? {
         guard !isLoading else { return nil }
 
-        guard let captured = await selectionService.captureText(), !captured.isEmpty else {
+        replacementService.rememberCurrentSourceApplication()
+
+        guard let captured = await selectionService.captureText(), !captured.text.isEmpty else {
             clearOutput()
+            replacementService.clearSourceApplication()
+            currentSourceSupportsReplacement = false
             errorMessage = "No selected text or clipboard text was found."
             return nil
         }
 
-        sourceText = captured
+        sourceText = captured.text
+        currentSourceSupportsReplacement = captured.source == .selection
+        if !currentSourceSupportsReplacement {
+            replacementService.clearSourceApplication()
+        }
         errorMessage = nil
-        return captured
+        return captured.text
     }
 
     func translateHistoryItem(_ text: String) {
@@ -62,38 +84,99 @@ final class TranslationViewModel: ObservableObject {
         }
     }
 
-    func translate(_ text: String) async {
+    func translate(_ text: String, preserveReplacementEligibility: Bool = false) async {
         let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        translationTask?.cancel()
+        generationTask?.cancel()
 
         guard !input.isEmpty else {
             clearOutput()
             errorMessage = "Enter or copy text before translating."
-            activeTranslationID = nil
-            translationTask = nil
+            activeOperationID = nil
+            generationTask = nil
             return
         }
 
-        let translationID = UUID()
-        activeTranslationID = translationID
+        let operationID = UUID()
+        activeOperationID = operationID
+        sourceText = input
+        if !preserveReplacementEligibility {
+            currentSourceSupportsReplacement = false
+            replacementService.clearSourceApplication()
+        }
+        historyService.add(input)
+        isLoading = true
+        errorMessage = nil
+        outputMode = .translation
+        rawOutput = ""
+        englishText = ""
+        vietnameseText = ""
+        rewriteText = ""
+        rewriteSourceText = ""
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.runTranslation(input, operationID: operationID)
+        }
+        generationTask = task
+
+        await task.value
+
+        if activeOperationID == operationID {
+            generationTask = nil
+        }
+    }
+
+    func rewriteCurrentSource() async {
+        let input = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+        generationTask?.cancel()
+
+        guard !input.isEmpty else {
+            rewriteText = ""
+            rewriteSourceText = ""
+            errorMessage = "No source text is available to rewrite."
+            activeOperationID = nil
+            generationTask = nil
+            return
+        }
+
+        let operationID = UUID()
+        activeOperationID = operationID
         sourceText = input
         historyService.add(input)
         isLoading = true
         errorMessage = nil
+        outputMode = .rewrite
         rawOutput = ""
         englishText = ""
         vietnameseText = ""
+        rewriteText = ""
+        rewriteSourceText = ""
 
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.runTranslation(input, translationID: translationID)
+            await self.runRewrite(input, operationID: operationID)
         }
-        translationTask = task
+        generationTask = task
 
         await task.value
 
-        if activeTranslationID == translationID {
-            translationTask = nil
+        if activeOperationID == operationID {
+            generationTask = nil
+        }
+    }
+
+    func replaceSelectionWithRewrite() async {
+        let output = rewriteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard canReplaceSelection, !output.isEmpty else {
+            errorMessage = "No rewritten text is available to replace the selection."
+            return
+        }
+
+        do {
+            try await replacementService.replaceSelection(with: output)
+            errorMessage = nil
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 
@@ -109,15 +192,20 @@ final class TranslationViewModel: ObservableObject {
         sourceText = ""
         englishText = ""
         vietnameseText = ""
+        rewriteText = ""
+        rewriteSourceText = ""
+        currentSourceSupportsReplacement = false
+        replacementService.clearSourceApplication()
         rawOutput = ""
         isLoading = false
+        outputMode = .none
     }
 
-    private func runTranslation(_ input: String, translationID: UUID) async {
+    private func runTranslation(_ input: String, operationID: UUID) async {
         do {
             let finalOutput = try await translator.translate(text: input, model: model) { [weak self] token in
                 await MainActor.run {
-                    guard let self, self.activeTranslationID == translationID, !Task.isCancelled else {
+                    guard let self, self.activeOperationID == operationID, !Task.isCancelled else {
                         return
                     }
                     self.rawOutput += token
@@ -125,7 +213,7 @@ final class TranslationViewModel: ObservableObject {
                 }
             }
 
-            guard activeTranslationID == translationID, !Task.isCancelled else {
+            guard activeOperationID == operationID, !Task.isCancelled else {
                 return
             }
 
@@ -133,11 +221,43 @@ final class TranslationViewModel: ObservableObject {
             applySections(from: finalOutput)
             isLoading = false
         } catch is CancellationError {
-            if activeTranslationID == translationID {
+            if activeOperationID == operationID {
                 isLoading = false
             }
         } catch {
-            guard activeTranslationID == translationID else {
+            guard activeOperationID == operationID else {
+                return
+            }
+
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            isLoading = false
+        }
+    }
+
+    private func runRewrite(_ input: String, operationID: UUID) async {
+        do {
+            let finalOutput = try await translator.rewrite(text: input, model: model) { [weak self] token in
+                await MainActor.run {
+                    guard let self, self.activeOperationID == operationID, !Task.isCancelled else {
+                        return
+                    }
+                    self.rewriteText += token
+                }
+            }
+
+            guard activeOperationID == operationID, !Task.isCancelled else {
+                return
+            }
+
+            rewriteText = finalOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+            rewriteSourceText = input
+            isLoading = false
+        } catch is CancellationError {
+            if activeOperationID == operationID {
+                isLoading = false
+            }
+        } catch {
+            guard activeOperationID == operationID else {
                 return
             }
 
@@ -179,4 +299,10 @@ struct TranslationSections: Equatable {
             vietnamese: String(afterEnglish[vietnameseRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
+}
+
+enum TranslationOutputMode {
+    case none
+    case translation
+    case rewrite
 }

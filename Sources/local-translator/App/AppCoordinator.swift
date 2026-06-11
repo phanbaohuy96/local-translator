@@ -6,11 +6,13 @@ final class AppCoordinator {
     private let hotkeyService = HotkeyService()
     private let historyService = ClipboardHistoryService()
     private let selectionService = SelectionCaptureService()
+    private let replacementService = SelectionReplacementService()
     private let ollamaClient = OllamaClient()
 
     private lazy var translationViewModel = TranslationViewModel(
         selectionService: selectionService,
         historyService: historyService,
+        replacementService: replacementService,
         translator: ollamaClient
     )
 
@@ -41,10 +43,13 @@ final class AppCoordinator {
 
     func start() {
         statusBarController.install()
-        hotkeyService.onHotkey = { [weak self] in
+        hotkeyService.onTranslateHotkey = { [weak self] in
             self?.openTranslatorAndCapture()
         }
-        hotkeyService.registerOptionSpace()
+        hotkeyService.onRewriteHotkey = { [weak self] in
+            self?.openTranslatorAndRewrite()
+        }
+        hotkeyService.registerHotkeys()
     }
 
     private func showTranslator() {
@@ -57,7 +62,18 @@ final class AppCoordinator {
             showTranslator()
 
             if let capturedText {
-                await translationViewModel.translate(capturedText)
+                await translationViewModel.translate(capturedText, preserveReplacementEligibility: true)
+            }
+        }
+    }
+
+    private func openTranslatorAndRewrite() {
+        Task { @MainActor in
+            let capturedText = await translationViewModel.captureInput()
+            showTranslator()
+
+            if capturedText != nil {
+                await translationViewModel.rewriteCurrentSource()
             }
         }
     }
