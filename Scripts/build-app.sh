@@ -17,10 +17,20 @@ if command -v codesign >/dev/null 2>&1; then
     SIGN_IDENTITY="${LOCAL_TRANSLATOR_CODESIGN_IDENTITY:-}"
 
     if [[ -z "$SIGN_IDENTITY" ]] && command -v security >/dev/null 2>&1; then
-        SIGN_IDENTITY="$(security find-identity -v -p codesigning | awk -F '"' '/"[^"]+"/ { print $2; exit }')"
+        SIGN_IDENTITY="$(
+            security find-identity -v -p codesigning \
+                | awk -F '"' '
+                    /"3rd Party Mac Developer Application:/ { print $2; exit }
+                    /"Developer ID Application:/ { print $2; exit }
+                    /"Apple Development:/ { fallback = fallback ? fallback : $2 }
+                    /"Mac Developer:/ { fallback = fallback ? fallback : $2 }
+                    END { if (fallback) print fallback }
+                '
+        )"
     fi
 
     if [[ -n "$SIGN_IDENTITY" ]]; then
+        echo "Signing with identity: $SIGN_IDENTITY" >&2
         codesign --force --deep --sign "$SIGN_IDENTITY" "$APP_DIR" >/dev/null
     else
         echo "warning: no code-signing identity found; using ad-hoc signing, Accessibility permission may reset after rebuilds" >&2
