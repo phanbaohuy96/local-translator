@@ -5,6 +5,7 @@ final class AppCoordinator {
     private let loginItemService = LoginItemService()
     private let hotkeyService = HotkeyService()
     private let historyService = ClipboardHistoryService()
+    private lazy var clipboardMonitorService = ClipboardMonitorService(historyService: historyService)
     private let selectionService = SelectionCaptureService()
     private let replacementService = SelectionReplacementService()
     private let ollamaClient = OllamaClient()
@@ -22,7 +23,7 @@ final class AppCoordinator {
             self?.openTranslatorAndCapture()
         },
         onOpenHistory: { [weak self] in
-            self?.showTranslator()
+            self?.showHistory()
         },
         onOpenSettings: { [weak self] in
             self?.showSettings()
@@ -36,6 +37,10 @@ final class AppCoordinator {
         viewModel: translationViewModel
     )
 
+    private lazy var clipboardHistoryPanelController = ClipboardHistoryPanelController(
+        viewModel: translationViewModel
+    )
+
     private lazy var settingsWindowController = SettingsWindowController(
         loginItemService: loginItemService,
         translationViewModel: translationViewModel
@@ -43,6 +48,7 @@ final class AppCoordinator {
 
     func start() {
         statusBarController.install()
+        clipboardMonitorService.start()
         hotkeyService.onTranslateHotkey = { [weak self] in
             self?.openTranslatorAndCapture()
         }
@@ -54,6 +60,10 @@ final class AppCoordinator {
 
     private func showTranslator() {
         translatorPanelController.show()
+    }
+
+    private func showHistory() {
+        clipboardHistoryPanelController.show()
     }
 
     private func openTranslatorAndCapture() {
