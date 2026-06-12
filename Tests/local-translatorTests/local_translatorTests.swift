@@ -45,6 +45,54 @@ import Testing
 }
 
 @MainActor
+@Test func clipboardMonitorRecordsExternalClipboardChanges() {
+    let history = ClipboardHistoryService()
+    let pasteboard = FakeClipboardTextReader(changeCount: 1, text: "already copied")
+    let monitor = ClipboardMonitorService(
+        historyService: history,
+        pasteboard: pasteboard,
+        interval: 60
+    )
+
+    monitor.start()
+    monitor.stop()
+    #expect(history.items == ["already copied"])
+
+    monitor.poll()
+    #expect(history.items == ["already copied"])
+
+    pasteboard.text = " copied elsewhere "
+    pasteboard.changeCount = 2
+    monitor.poll()
+    #expect(history.items == ["copied elsewhere", "already copied"])
+
+    pasteboard.text = ""
+    pasteboard.changeCount = 3
+    monitor.poll()
+    #expect(history.items == ["copied elsewhere", "already copied"])
+}
+
+@MainActor
+@Test func copyingHistoryItemWritesTrimmedTextToClipboardWithoutTranslating() {
+    let translator = FakeTranslator()
+    let clipboard = FakeClipboardWriter()
+    let viewModel = TranslationViewModel(
+        selectionService: FakeSelection(text: nil),
+        historyService: ClipboardHistoryService(),
+        replacementService: FakeReplacement(),
+        translator: translator,
+        clipboardWriter: clipboard
+    )
+
+    viewModel.copyHistoryItemToClipboard(" saved clipboard text ")
+
+    #expect(clipboard.writtenStrings == ["saved clipboard text"])
+    #expect(translator.calls.isEmpty)
+    #expect(viewModel.sourceText.isEmpty)
+    #expect(viewModel.outputMode == .none)
+}
+
+@MainActor
 @Test func emptyCaptureDoesNotCallTranslatorAndShowsReadableError() async {
     let translator = FakeTranslator()
     let viewModel = TranslationViewModel(
@@ -261,6 +309,28 @@ private struct FakeSelection: SelectionCapturing {
 
     func captureText() async -> CapturedText? {
         text.map { CapturedText(text: $0, source: source) }
+    }
+}
+
+private final class FakeClipboardTextReader: ClipboardTextReading {
+    var changeCount: Int
+    var text: String?
+
+    init(changeCount: Int, text: String?) {
+        self.changeCount = changeCount
+        self.text = text
+    }
+
+    func stringForHistory() -> String? {
+        text
+    }
+}
+
+private final class FakeClipboardWriter: ClipboardWriting {
+    private(set) var writtenStrings: [String] = []
+
+    func writeString(_ text: String) {
+        writtenStrings.append(text)
     }
 }
 

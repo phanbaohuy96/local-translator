@@ -1,6 +1,17 @@
 import AppKit
 import Foundation
 
+protocol ClipboardWriting: AnyObject {
+    func writeString(_ text: String)
+}
+
+extension NSPasteboard: ClipboardWriting {
+    func writeString(_ text: String) {
+        clearContents()
+        setString(text, forType: .string)
+    }
+}
+
 @MainActor
 final class TranslationViewModel: ObservableObject {
     @Published var sourceText = ""
@@ -22,6 +33,7 @@ final class TranslationViewModel: ObservableObject {
     private let selectionService: SelectionCapturing
     private let replacementService: SelectionReplacing
     private let translator: OllamaTranslating
+    private let clipboardWriter: ClipboardWriting
     private var activeOperationID: UUID?
     private var generationTask: Task<Void, Never>?
     private var rewriteSourceText = ""
@@ -39,12 +51,14 @@ final class TranslationViewModel: ObservableObject {
         selectionService: SelectionCapturing,
         historyService: ClipboardHistoryService,
         replacementService: SelectionReplacing,
-        translator: OllamaTranslating
+        translator: OllamaTranslating,
+        clipboardWriter: ClipboardWriting = NSPasteboard.general
     ) {
         self.selectionService = selectionService
         self.historyService = historyService
         self.replacementService = replacementService
         self.translator = translator
+        self.clipboardWriter = clipboardWriter
         self.model = UserDefaults.standard.string(forKey: Self.modelDefaultsKey) ?? "qwen2.5:7b"
     }
 
@@ -76,12 +90,6 @@ final class TranslationViewModel: ObservableObject {
         }
         errorMessage = nil
         return captured.text
-    }
-
-    func translateHistoryItem(_ text: String) {
-        Task {
-            await translate(text)
-        }
     }
 
     func translate(_ text: String, preserveReplacementEligibility: Bool = false) async {
@@ -188,12 +196,15 @@ final class TranslationViewModel: ObservableObject {
         copyToClipboard(rewriteText)
     }
 
+    func copyHistoryItemToClipboard(_ text: String) {
+        copyToClipboard(text)
+    }
+
     private func copyToClipboard(_ value: String) {
         let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        clipboardWriter.writeString(text)
     }
 
     private func clearOutput() {

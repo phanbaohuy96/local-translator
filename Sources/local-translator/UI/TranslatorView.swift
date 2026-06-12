@@ -2,6 +2,12 @@ import SwiftUI
 
 struct TranslatorView: View {
     @ObservedObject var viewModel: TranslationViewModel
+    @ObservedObject private var historyService: ClipboardHistoryService
+
+    init(viewModel: TranslationViewModel) {
+        self.viewModel = viewModel
+        self.historyService = viewModel.historyService
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,21 +87,35 @@ struct TranslatorView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
 
-            if viewModel.historyService.items.isEmpty {
+            if historyService.items.isEmpty {
                 Text("No recent clipboard text")
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 12)
                 Spacer()
             } else {
-                List(viewModel.historyService.items, id: \.self) { item in
-                    Button {
-                        viewModel.translateHistoryItem(item)
-                    } label: {
-                        Text(item)
-                            .lineLimit(3)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                List(historyService.items, id: \.self) { item in
+                    HStack(spacing: 8) {
+                        Button {
+                            Task {
+                                await viewModel.translate(item)
+                            }
+                        } label: {
+                            Text(item)
+                                .lineLimit(3)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Translate Clipboard Text")
+
+                        Button {
+                            viewModel.copyHistoryItemToClipboard(item)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Copy Clipboard Text")
                     }
-                    .buttonStyle(.plain)
+                    .padding(.vertical, 2)
                 }
                 .listStyle(.sidebar)
             }
