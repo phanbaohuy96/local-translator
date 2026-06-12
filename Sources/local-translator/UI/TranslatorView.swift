@@ -119,9 +119,15 @@ struct TranslatorView: View {
 
                 switch viewModel.outputMode {
                 case .rewrite:
-                    section(title: "Rewritten", text: viewModel.rewriteText, empty: "Rewritten text streams here")
+                    section(
+                        title: "Rewritten",
+                        text: viewModel.rewriteText,
+                        empty: "Rewritten text streams here",
+                        copyHelp: "Copy Rewritten Text"
+                    ) {
+                        viewModel.copyRewriteToClipboard()
+                    }
                 case .translation:
-                    section(title: "English", text: viewModel.englishText, empty: "Meaning and usage notes stream here")
                     section(title: "Vietnamese", text: viewModel.vietnameseText, empty: "Translation streams here")
                 case .none:
                     EmptyView()
@@ -147,10 +153,29 @@ struct TranslatorView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private func section(title: String, text: String, empty: String) -> some View {
+    private func section(
+        title: String,
+        text: String,
+        empty: String,
+        copyHelp: String? = nil,
+        copyAction: (() -> Void)? = nil
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.headline)
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.headline)
+
+                Spacer()
+
+                if let copyAction, let copyHelp {
+                    Button(action: copyAction) {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(copyHelp)
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
 
             Text(text.isEmpty ? empty : text)
                 .foregroundStyle(text.isEmpty ? .secondary : .primary)
