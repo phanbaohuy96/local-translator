@@ -181,7 +181,15 @@ final class TranslationViewModel: ObservableObject {
     }
 
     func copyVietnameseToClipboard() {
-        let text = vietnameseText.trimmingCharacters(in: .whitespacesAndNewlines)
+        copyToClipboard(vietnameseText)
+    }
+
+    func copyRewriteToClipboard() {
+        copyToClipboard(rewriteText)
+    }
+
+    private func copyToClipboard(_ value: String) {
+        let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
         NSPasteboard.general.clearContents()
@@ -282,7 +290,17 @@ struct TranslationSections: Equatable {
         let vietnameseMarker = "Vietnamese:"
 
         guard let englishRange = output.range(of: englishMarker, options: [.caseInsensitive]) else {
-            return TranslationSections(english: output.trimmingCharacters(in: .whitespacesAndNewlines), vietnamese: "")
+            guard let vietnameseRange = output.range(of: vietnameseMarker, options: [.caseInsensitive]) else {
+                return TranslationSections(
+                    english: "",
+                    vietnamese: output.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
+
+            return TranslationSections(
+                english: "",
+                vietnamese: String(output[vietnameseRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            )
         }
 
         let afterEnglish = output[englishRange.upperBound...]

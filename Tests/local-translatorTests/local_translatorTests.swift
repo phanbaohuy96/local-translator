@@ -7,7 +7,7 @@ import Testing
 
     #expect(messages.count == 2)
     #expect(messages[0].role == "system")
-    #expect(messages[0].content.contains("English:"))
+    #expect(!messages[0].content.contains("English:"))
     #expect(messages[0].content.contains("Vietnamese:"))
     #expect(messages[1] == OllamaMessage(role: "user", content: "hello"))
 }
@@ -83,8 +83,8 @@ import Testing
 @MainActor
 @Test func streamedTranslationUpdatesSections() async {
     let translator = FakeTranslator(tokens: [
-        "English:\nGreeting",
-        "\nVietnamese:\nXin chao"
+        "Vietnamese:\nXin",
+        " chao"
     ])
     let viewModel = TranslationViewModel(
         selectionService: FakeSelection(text: "Hello"),
@@ -95,16 +95,16 @@ import Testing
 
     await viewModel.captureAndTranslate()
 
-    #expect(viewModel.englishText == "Greeting")
+    #expect(viewModel.englishText.isEmpty)
     #expect(viewModel.vietnameseText == "Xin chao")
-    #expect(viewModel.rawOutput == "English:\nGreeting\nVietnamese:\nXin chao")
+    #expect(viewModel.rawOutput == "Vietnamese:\nXin chao")
     #expect(viewModel.outputMode == .translation)
 }
 
 @MainActor
 @Test func translateUsesCurrentModelValue() async {
     let translator = FakeTranslator(tokens: [
-        "English:\nGreeting\nVietnamese:\nXin chao"
+        "Vietnamese:\nXin chao"
     ])
     let viewModel = TranslationViewModel(
         selectionService: FakeSelection(text: "Hello"),
@@ -138,9 +138,9 @@ import Testing
 
     #expect(translator.calls == ["first", "second"])
     #expect(viewModel.sourceText == "second")
-    #expect(viewModel.englishText == "second English")
+    #expect(viewModel.englishText.isEmpty)
     #expect(viewModel.vietnameseText == "second Vietnamese")
-    #expect(!viewModel.rawOutput.contains("first English"))
+    #expect(!viewModel.rawOutput.contains("first Vietnamese"))
     #expect(!viewModel.isLoading)
 }
 
@@ -249,7 +249,7 @@ import Testing
     #expect(translator.rewriteCalls == ["first"])
     #expect(translator.calls == ["second"])
     #expect(viewModel.sourceText == "second")
-    #expect(viewModel.englishText == "second English")
+    #expect(viewModel.englishText.isEmpty)
     #expect(viewModel.vietnameseText == "second Vietnamese")
     #expect(viewModel.rewriteText.isEmpty)
     #expect(!viewModel.isLoading)
@@ -368,7 +368,7 @@ private final class DelayedTranslator: OllamaTranslating {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
 
-        let output = "English:\n\(text) English\nVietnamese:\n\(text) Vietnamese"
+        let output = "Vietnamese:\n\(text) Vietnamese"
         await onToken(output)
         return output
     }

@@ -8,7 +8,7 @@ Native macOS menu-bar translator backed by local Ollama.
 - Global shortcuts: `Option-Space` translates, `Command-Option-R` rewrites.
 - Selected-text capture by temporary copy, with clipboard restoration.
 - Clipboard fallback when no selection is available or Accessibility permission is missing.
-- Floating translator popup with source preview, English notes, Vietnamese translation, and session history.
+- Floating translator popup with source preview, Vietnamese translation, rewrite output, and session history.
 - Session-only clipboard history capped at 20 deduplicated items.
 - Streaming Ollama chat responses from `http://localhost:11434/api/chat`.
 - User-controlled Start at Login, disabled by default.
